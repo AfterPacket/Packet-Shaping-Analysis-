@@ -1,46 +1,58 @@
 from scapy.all import *
 import socket
 
-# Get the local IP address
-s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.connect(("8.8.8.8", 80))
-local_ip_address = s.getsockname()[0]
-s.close()
+# 1. Get the local IP address accurately
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
 
-# Set up the filter to capture incoming traffic
-filter = "tcp and inbound"
+local_ip = get_local_ip()
+print(f"Monitoring traffic for Local IP: {local_ip}")
 
-# Start capturing traffic on the network interface
-packets = sniff(filter=filter, count=1000)
+# 2. Counters
+stats = {
+    "received": 0,
+    "by_router": 0,    # ICMP Unreachable
+    "by_receiver": 0   # TCP RST
+}
 
-# Count the number of packets received and dropped
-received = 0
-dropped = 0
-by_router = 0
-by_receiver = 0
-
-for packet in packets:
-    if IP in packet and TCP in packet:
-        if packet[IP].src == local_ip_address:
-            # Count only packets received from your IP address
-            received += 1
+# 3. Processing Logic
+def process_packet(packet):
+    # Count general incoming TCP traffic
+    if packet.haslayer(TCP) and packet.haslayer(IP):
+        if packet[IP].dst == local_ip:
+            stats["received"] += 1
+            
+            # Check if a remote host is Rejecting the connection (RST flag)
             if packet[TCP].flags & 0x04:
-                if packet[TCP].dport == 80:
-                    # Packets dropped by receiver
-                    by_receiver += 1
-                else:
-                    # Packets dropped by router
-                    by_router += 1
-                    dropped += 1
-        else:
-            # Packets not sent to your IP address
-            dropped += 1
+                stats["by_receiver"] += 1
 
-# Print the results
-print("Packets received: ", received)
-print("Packets dropped: ", dropped)
+    # Check for Router/Network issues (ICMP Type 3)
+    if packet.haslayer(ICMP):
+        if packet[ICMP].type == 3:
+            stats["by_router"] += 1
 
-if by_router > by_receiver:
-    print("Packets dropped by router")
+# 4. Start Capture
+print("Capturing 1000 packets... (Run a browser or curl to generate traffic)")
+# Filter captures TCP and ICMP (router errors)
+sniff(filter="tcp or icmp", prn=process_packet, count=1000)
+
+# 5. Final Report
+print("\n--- Capture Results ---")
+print(f"Total TCP Packets Received: {stats['received']}")
+print(f"Packets Rejected by Receiver (RST): {stats['by_receiver']}")
+print(f"Packets Blocked by Router (ICMP Unreachable): {stats['by_router']}")
+
+if stats['by_router'] > stats['by_receiver']:
+    print("\nConclusion: Network/Router issues are more prevalent.")
+elif stats['by_receiver'] > 0:
+    print("\nConclusion: Target hosts are actively rejecting connections.")
 else:
-    print("Packets dropped by receiver")
+    print("\nConclusion: No significant drops detected.")
