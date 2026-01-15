@@ -143,7 +143,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## 🐛 Issues & Support
 
-Found a bug or have a feature request? Please [open an issue](https://github.com/AfterPacket/SYN-Response-Analyzer/issues) with:
+Found a bug or have a feature request? Please [open an issue](https://github.com/AfterPacket/Packet-Shaping-Analysis-/issues) with:
 
 - Steps to reproduce
 - Expected vs actual behavior
